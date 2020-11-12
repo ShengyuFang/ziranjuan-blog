@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.1.1">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2020-11-12T20:51:41+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">自然卷</title><subtitle>寻找黑夜中的一点璀璨</subtitle><entry><title type="html">Raft论文解读与实现</title><link href="http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html" rel="alternate" type="text/html" title="Raft论文解读与实现" /><published>2020-11-12T17:26:15+08:00</published><updated>2020-11-12T17:26:15+08:00</updated><id>http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0</id><content type="html" xml:base="http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html">&lt;h1 id=&quot;raft算法论文解读与实现&quot;&gt;Raft算法论文解读与实现&lt;/h1&gt;
+&lt;h2 id=&quot;相关资料&quot;&gt;相关资料&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;论文原文 https://ramcloud.atlassian.net/wiki/download/attachments/6586375/raft.pdf&lt;/li&gt;
+  &lt;li&gt;Raft演示动画 https://raft.github.io/#implementations 在实现raft协议时可以参考该网站JS代码，在resources中的raft.js&lt;br /&gt;
+另个演示动画 http://thesecretlivesofdata.com/raft/&lt;/li&gt;
+  &lt;li&gt;MIT6.824课程实验 https://pdos.csail.mit.edu/6.824/labs/lab-raft.html&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;raft基本介绍&quot;&gt;Raft基本介绍&lt;/h3&gt;
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;em&gt;Raft是为了解决什么问题&lt;/em&gt; 
+分布式系统的一致性,分布式集群中不同节点对同一请求返回结果需要保持一致。但是，Raft一致性的前提是系统中不会有伪造的消息，因此并不能解决拜占庭将军问题。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;em&gt;Raft算法思路简介&lt;/em&gt; 
+为了避免系统不同节点返回不同结果造成的困惑，Raft采用少数服从多数的思路，大多数(超过集群节点数一半)的节点所认为的请求响应就被当作正确的响应。偶数节点会出现一半认为A一半认为B的情况，从而导致不一致，所以Raft节点总数必须是奇数。虽然Raft是分布式算法，但是Raft采用了集中式管理的思路，集群中存在唯一LEADER节点，只有LEADER节点可以将用户请求广播给各个节点。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;raft初探&quot;&gt;Raft初探&lt;/h3&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;首先明确一点，一个节点发送的请求可能在网络中被延迟很久才到达目标节点，用锁之类的解决不了这种问题，什么叫线程安全得重新思考下。但是Raft算法必须要解决这一的问题才能正确运行，于是Raft采用了Term的概念，是不是很像自增的分布式主键的思想？&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Raft将整个算法分为两个过程：leader选举和日志(包含了用户的命令)同步。节点有三种角色，follower candidate leader。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Raft中的role状态机
+&lt;img src=&quot;/assets/stateMachine.PNG&quot; alt=&quot;avatar&quot; /&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Leader选举阶段
+系统刚启动时所有节点都是follower，每个节点都会有个计时器，在计时器到达选举时间就转化为candidate并且让Term+1发起投票，而获得超过一半节点支持的candidate就会变成leader。
+多个candidate参加选举可能引起选举失败，没有节点获得超过一半的选举票这时候进入下一轮选举，Term+1。为了避免多个节点同时成为candidate发起投票，每个几点计时器都会附加随机性。&lt;/li&gt;
+  &lt;li&gt;日志复制
+选出LEADRE节点后，LEADER节点定时发送心跳包将日志广播给其他节点。其他节点收到LEADRE心跳后重置选举时间，如果是candidate则还会重新转化为follower节点。Raft是将日志同步请求放在心跳包中进行的。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;上面只是粗略介绍了Raft算法的两个过程。试想一下可能存在的问题：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;怎么保证LEADER选举安全性，假设有个节点掉线很久，并且重连上后转换成了candidate发起了投票或者一个candidate的选举请求很晚才到达其他节点，这时候其他节点能给该节点投票么？如果不加限制条件的就答应投票可能会造成leader转为follower，然后不得不重新进行一轮选举，非常浪费资源。因此，这里引入raft文中第一条限制：只有candidate投票请求中的Term比收到请求的节点的term大或者相等才会把票投给它。
+另外为了保证一轮选举只会有一个leader产生，所以已经投过票的节点不能再投票给其他节点(默认会投自己一票，这个例外)。
+LEADER选举的安全性还与日志有关，这个下文章后面再讲。&lt;/li&gt;
+  &lt;li&gt;日志复制给其它节点的安全性。LEADRE节点A可能掉线重连，然后A会误以为自己仍是leader(在没收到新leader的心跳包情况下)继续将同步日志发送给其它节点。或者出现这种情况，LEADER节点A发送的同步日志很晚才到其它节点，此时已经选举出新的LEADER节点B。已经选举出新leader说明至少有一半节点收到后来的candidate的投票请求，然后将TERM+1。这种情况依然是比较TERM大小，对于TERM比自己小的请求节点不会处理。而如果还有节点TERM还未+1就收到A的请求，那么它会复制A的请求，但是下一次leaderB发送心跳包时会根据日志匹配的原则将那个节点上的该日志删除掉。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;总结上面的问题：什么情况下节点会同意投票请求，follower节点收到日志同步请求怎样更新自己的日志。&lt;/p&gt;
+
+&lt;p&gt;从上面的讨论引出raft几个关键变量：nextIndex[] matchIndex[] preIndex[] commitIndex。Raft原文中的applied index可以先不用理，论文中基本没说那个干嘛用的！&lt;/p&gt;
+&lt;h3 id=&quot;nextindex-matchindex-preindex&quot;&gt;nextIndex[] matchIndex[] preIndex[]&lt;/h3&gt;
+&lt;h3 id=&quot;raft论文中限制条件总结&quot;&gt;Raft论文中限制条件总结&lt;/h3&gt;
+&lt;h3 id=&quot;raft算法实现&quot;&gt;Raft算法实现&lt;/h3&gt;
+&lt;p&gt;总结起来经验就是保证一个节点明明是follower却干着leader的事情，然后就是前文提到的不要弄错并不是多线程问题的问题，能不加锁不要加锁。
+占坑&lt;/p&gt;</content><author><name></name></author><category term="Raft" /><summary type="html">Raft算法论文解读与实现 相关资料 论文原文 https://ramcloud.atlassian.net/wiki/download/attachments/6586375/raft.pdf Raft演示动画 https://raft.github.io/#implementations 在实现raft协议时可以参考该网站JS代码，在resources中的raft.js 另个演示动画 http://thesecretlivesofdata.com/raft/ MIT6.824课程实验 https://pdos.csail.mit.edu/6.824/labs/lab-raft.html</summary></entry></feed>
