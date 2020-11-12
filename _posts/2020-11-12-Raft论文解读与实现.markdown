@@ -23,7 +23,7 @@ categories: Raft
 >Raft将整个算法分为两个过程：leader选举和日志(包含了用户的命令)同步。节点有三种角色，follower candidate leader。
 
 Raft中的role状态机
-![avatar](/assets/stateMachine.PNG)
+![avatar](/ziranjuan-blog/assets/stateMachine.PNG)
 
 1. Leader选举阶段
 系统刚启动时所有节点都是follower，每个节点都会有个计时器，在计时器到达选举时间就转化为candidate并且让Term+1发起投票，而获得超过一半节点支持的candidate就会变成leader。
