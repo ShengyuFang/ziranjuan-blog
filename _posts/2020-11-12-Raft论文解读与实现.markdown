@@ -23,7 +23,7 @@ categories: Raft
 >Raft将整个算法分为两个过程：leader选举和日志(包含了用户的命令)同步。节点有三种角色，follower candidate leader。
 
 Raft中的role状态机
-![avatar](/assets/stateMachine.PNG)
+![avatar](/ziranjuan-blog/assets/stateMachine.PNG)
 
 1. Leader选举阶段
 系统刚启动时所有节点都是follower，每个节点都会有个计时器，在计时器到达选举时间就转化为candidate并且让Term+1发起投票，而获得超过一半节点支持的candidate就会变成leader。
@@ -62,7 +62,7 @@ matchIndex什么时候会不自增：一般情况下matchIndex总是自增的。
 因为程序里要特别注意***别遗漏matchIndex必须自增***。
 2. commitIndex
 这个也是巨坑。论文没全部看完就去写代码都是泪。总结就是： Raft never commits log entries from previous terms by counting replicas。如果日志被复制到超过一半节点了不代表就可以更新commitIndex了，那个日志的term必须是当前term才行。这里就直接粘贴论文原图了。
-![avatar](/assets/commitIndex.PNG)
+![avatar](/ziranjuan-blog/assets/commitIndex.PNG)
 ### Raft算法实现
 总结起来经验就是保证一个节点明明是follower却干着leader的事情，然后就是前文提到的不要把并不是多线程的问题弄成了多线程问题。
 从状态机那张图可以瞬间写出一个
