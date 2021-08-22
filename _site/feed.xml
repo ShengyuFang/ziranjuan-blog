@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.1.1">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2020-11-12T21:08:36+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">自然卷</title><subtitle>寻找黑夜中的一点璀璨</subtitle><entry><title type="html">Raft论文解读与实现</title><link href="http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html" rel="alternate" type="text/html" title="Raft论文解读与实现" /><published>2020-11-12T17:26:15+08:00</published><updated>2020-11-12T17:26:15+08:00</updated><id>http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0</id><content type="html" xml:base="http://localhost:4000/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html">&lt;h1 id=&quot;raft算法论文解读与实现&quot;&gt;Raft算法论文解读与实现&lt;/h1&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.1.1">Jekyll</generator><link href="http://localhost:4000/ziranjuan-blog/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/ziranjuan-blog/" rel="alternate" type="text/html" /><updated>2021-08-22T17:55:25+08:00</updated><id>http://localhost:4000/ziranjuan-blog/feed.xml</id><title type="html">北斗</title><subtitle>男儿当自强</subtitle><entry><title type="html">Raft论文解读与实现</title><link href="http://localhost:4000/ziranjuan-blog/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html" rel="alternate" type="text/html" title="Raft论文解读与实现" /><published>2020-11-12T17:26:15+08:00</published><updated>2020-11-12T17:26:15+08:00</updated><id>http://localhost:4000/ziranjuan-blog/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0</id><content type="html" xml:base="http://localhost:4000/ziranjuan-blog/raft/2020/11/12/Raft%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%E4%B8%8E%E5%AE%9E%E7%8E%B0.html">&lt;h1 id=&quot;raft算法论文解读与实现&quot;&gt;Raft算法论文解读与实现&lt;/h1&gt;
 &lt;h2 id=&quot;相关资料&quot;&gt;相关资料&lt;/h2&gt;
 &lt;ul&gt;
   &lt;li&gt;论文原文 https://ramcloud.atlassian.net/wiki/download/attachments/6586375/raft.pdf&lt;/li&gt;
@@ -29,7 +29,7 @@
 &lt;/blockquote&gt;
 
 &lt;p&gt;Raft中的role状态机
-&lt;img src=&quot;/assets/stateMachine.PNG&quot; alt=&quot;avatar&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;/ziranjuan-blog/assets/stateMachine.PNG&quot; alt=&quot;avatar&quot; /&gt;&lt;/p&gt;
 
 &lt;ol&gt;
   &lt;li&gt;Leader选举阶段
@@ -49,9 +49,125 @@ LEADER选举的安全性还与日志有关，这个下文章后面再讲。&lt;/
 
 &lt;p&gt;总结上面的问题：什么情况下节点会同意投票请求，follower节点收到日志同步请求怎样更新自己的日志。&lt;/p&gt;
 
-&lt;p&gt;从上面的讨论引出raft几个关键变量：nextIndex[] matchIndex[] preIndex[] commitIndex。Raft原文中的applied index可以先不用理，论文中基本没说那个干嘛用的！&lt;/p&gt;
-&lt;h3 id=&quot;nextindex-matchindex-preindex&quot;&gt;nextIndex[] matchIndex[] preIndex[]&lt;/h3&gt;
+&lt;p&gt;从上面的讨论引出raft几个关键变量：nextIndex[] matchIndex[] preIndex commitIndex。Raft原文中的applied index可以先不用理，论文中基本没说那个干嘛用的！&lt;/p&gt;
+&lt;h3 id=&quot;nextindex-matchindex&quot;&gt;nextIndex[] matchIndex[]&lt;/h3&gt;
+&lt;ol&gt;
+  &lt;li&gt;只有leader节点需要维护这两个变量&lt;/li&gt;
+  &lt;li&gt;日志同步过程
+    &lt;blockquote&gt;
+      &lt;p&gt;当一个节点刚成为leader节点，它不知道其他节点上的日志哪些是正确的(也就是和leader的日志是一致的)，哪些是错误的，它需要覆盖其他节点的错误日志。这里有个一直成立的条件，如果follower节点index i的日志与leader节点是一致的，那么它index i以前的日志也都会一致。这是由算法保证的。假设对某follower节点从index i开始尝试复制日志，leader节点发现自己index i的日志与follower日志不一致，那么尝试index i-1，依次类推，直到找到匹配的index。也可以采用2分法，但是有没有这个必要呢,不清楚。不清楚干脆不费劲。&lt;/p&gt;
+    &lt;/blockquote&gt;
+  &lt;/li&gt;
+  &lt;li&gt;为什么需要这两个变量
+    &lt;blockquote&gt;
+      &lt;p&gt;一个节点成为leader节点后按照2.中的办法找到匹配的index，然后对每个其他节点开启一个同步线程，将后续的日志同步给follower节点，之后来了一个用户请求后立马将其同步给其他节点就行了。这样想，似乎没有必要维护这三个变量？但是这样做有一些无法解决的问题，leader同步请求的过程中来了其他请求怎么办？可能的解决办法是加一个matchIndex[]，记录follower节点日志匹配的下标，然后&lt;strong&gt;不停地&lt;/strong&gt;从matchIndex到当前&lt;strong&gt;日志末尾&lt;/strong&gt;同步。
+那nextIndex[]干嘛用的呢？前面的”不停地”同步有问题，leader节点不停地同步太占用其他线程资源，所以raft都是通过心跳包里进行同步。每次同步时leader节点和follower节点日志都有延迟，总不能每次都将matchIndex到日志末尾的所有日志都发送给follower节点吧。所以才有了nextIndex[]，每次心跳包里包含了matchIndex到nextIndex的日志。nextIndex的另个作用也就是2.中的i,节点刚成为leader节点时nextIndex初始化leader节点日志长度(要不要减1取决代码怎么实现),设置的比较乐观。&lt;/p&gt;
+    &lt;/blockquote&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;preindex&quot;&gt;preIndex&lt;/h3&gt;
+&lt;p&gt;Leader节点发送的心跳包里包含了preIndex，作用可以参考上面写的日志同步过程。&lt;/p&gt;
+&lt;h3 id=&quot;commitindex&quot;&gt;commitIndex&lt;/h3&gt;
+&lt;p&gt;当leader节点一个日志被超过一半的节点复制了那么改日志就被commit了，对raft本身来说commit没有用，但是调用raft的客户端需要知道哪些日志被commit了。&lt;strong&gt;这里有个非常大的坑&lt;/strong&gt;，后面再提。&lt;/p&gt;
+&lt;h3 id=&quot;applied-index&quot;&gt;applied index&lt;/h3&gt;
+&lt;p&gt;raft需要通知调用raft的客户端哪些日志被commit了，因此单独开一个线程去通知，每次从applied index到当前commitIndex的日志。applied index也就是上一次已经通知过的commitIndex。&lt;/p&gt;
 &lt;h3 id=&quot;raft论文中限制条件总结&quot;&gt;Raft论文中限制条件总结&lt;/h3&gt;
-&lt;h3 id=&quot;raft算法实现&quot;&gt;Raft算法实现&lt;/h3&gt;
-&lt;p&gt;总结起来经验就是保证一个节点明明是follower却干着leader的事情，然后就是前文提到的不要弄错并不是多线程问题的问题，能不加锁不要加锁。
-占坑&lt;/p&gt;</content><author><name></name></author><category term="Raft" /><summary type="html">Raft算法论文解读与实现 相关资料 论文原文 https://ramcloud.atlassian.net/wiki/download/attachments/6586375/raft.pdf Raft演示动画 https://raft.github.io/#implementations 在实现raft协议时可以参考该网站JS代码，在resources中的raft.js 另个演示动画 http://thesecretlivesofdata.com/raft/ MIT6.824课程实验 https://pdos.csail.mit.edu/6.824/labs/lab-raft.html</summary></entry></feed>
+&lt;h3 id=&quot;raft里的坑&quot;&gt;Raft里的坑&lt;/h3&gt;
+&lt;ol&gt;
+  &lt;li&gt;matchIndex[]，论文里说matchIndex是&lt;strong&gt;自增&lt;/strong&gt;的，但是怎么保证自增呢？
+matchIndex不自增会有的问题：leader节点刚同步完log[20:22]，然后由于matchIndex没有变成23，而又变成了20，那么它又同步了一遍，如果总是反复同步log[20:22]就跳不出循环了。
+matchIndex什么时候会不自增：一般情况下matchIndex总是自增的。但是如果leader发送了log[20:22]请求未被follower接收到，那么再次发送log[20:22]，这时候第一次发送的log[20:22]请求被follower接收了，于是更改matchIndex到23，然后leader发送log[23:24]，也得到响应，matchIndex改为25。这时候第二次发送的log[20:22]被follower接收了，leader获得响应，将matchIndex从25改成了23。
+因为程序里要特别注意&lt;strong&gt;&lt;em&gt;别遗漏matchIndex必须自增&lt;/em&gt;&lt;/strong&gt;。&lt;/li&gt;
+  &lt;li&gt;commitIndex
+这个也是巨坑。论文没全部看完就去写代码都是泪。总结就是： Raft never commits log entries from previous terms by counting replicas。如果日志被复制到超过一半节点了不代表就可以更新commitIndex了，那个日志的term必须是当前term才行。这里就直接粘贴论文原图了。
+&lt;img src=&quot;/ziranjuan-blog/assets/commitIndex.PNG&quot; alt=&quot;avatar&quot; /&gt;
+    &lt;h3 id=&quot;raft算法实现&quot;&gt;Raft算法实现&lt;/h3&gt;
+    &lt;p&gt;总结起来经验就是保证一个节点明明是follower却干着leader的事情，然后就是前文提到的不要把并不是多线程的问题弄成了多线程问题。
+从状态机那张图可以瞬间写出一个&lt;/p&gt;
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;role&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FOLLOWER&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+             &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;doFollower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CANDIDATE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+             &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;doCandidate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LEADER&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+             &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;doLeader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;default&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+         &lt;span class=&quot;nb&quot;&gt;panic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;unknown role &quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;role&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+     &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+ &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;保证从doLeader之类函数跳出执行doFollower()时别还是跑着doLeader的线程。
+另外节点一边接收请求，一边发送请求，一边处理请求响应，这三者之间可能会修改了一个共享变量，引起线程安全问题，可以用锁来解决，也可以对于每个事件发送一个event到一个事件队列里，然后单线程去处理事件队列。&lt;/p&gt;
+    &lt;h3 id=&quot;raft-go实现的坑&quot;&gt;Raft go实现的坑&lt;/h3&gt;
+  &lt;/li&gt;
+  &lt;li&gt;下面的代码会遗漏chan事件，别写。定时任务没执行可能是因为你写了下面这样的代码
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+     &lt;span class=&quot;n&quot;&gt;j&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;select&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Tick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+             &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+                 &lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+             &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Tick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+             &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+                 &lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;b&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+             &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%v&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;j&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;因为两个chan同时有事件时select随机选一个执行
+可以改成&lt;/p&gt;
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; &lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ 	&lt;span class=&quot;n&quot;&gt;j&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;
+ 	&lt;span class=&quot;n&quot;&gt;ti&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;After&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+     &lt;span class=&quot;n&quot;&gt;tj&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Tick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ 		&lt;span class=&quot;k&quot;&gt;select&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ 		&lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ti&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+ 			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ 				&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+ 				&lt;span class=&quot;n&quot;&gt;ti&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;After&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+ 			&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+ 		&lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tj&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+ 			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ 				&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;b&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+                 &lt;span class=&quot;n&quot;&gt;tj&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Tick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;time&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Millisecond&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+ 			&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+ 		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+ 	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+ &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;把chan拿到外面来，不要每次都返回新的chan，这样下次select时候会处理&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;对于MIT 6.824
+记得补全kill函数，因为实验里节点宕机重启不会把那个节点的线程全关掉，如果是leader节点，那它可能宕机了还在发送消息
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Raft&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Kill&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StoreInt32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dead&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+ &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;true&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;再给个参考&lt;/p&gt;
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;role&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+     &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FOLLOWER&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+             &lt;span class=&quot;n&quot;&gt;rf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;doFollower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+         &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+     &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
+ &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;</content><author><name></name></author><category term="Raft" /><summary type="html">Raft算法论文解读与实现 相关资料 论文原文 https://ramcloud.atlassian.net/wiki/download/attachments/6586375/raft.pdf Raft演示动画 https://raft.github.io/#implementations 在实现raft协议时可以参考该网站JS代码，在resources中的raft.js 另个演示动画 http://thesecretlivesofdata.com/raft/ MIT6.824课程实验 https://pdos.csail.mit.edu/6.824/labs/lab-raft.html</summary></entry></feed>
